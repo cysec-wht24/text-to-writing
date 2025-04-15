@@ -9,8 +9,7 @@ const pageEl = document.querySelector('.page-a');
 let outputImages = [];
 
 /**
- * To generate image, we add styles to DIV and converts that HTML Element into Image.
- * This is the function that deals with it.
+ * To generate image, we add styles to DIV and convert that HTML Element into an Image.
  */
 async function convertDIVToImage() {
   const options = {
@@ -20,27 +19,69 @@ async function convertDIVToImage() {
     useCORS: true
   };
 
-  /** Function html2canvas comes from a library html2canvas which is included in the index.html */
+  /** The html2canvas library (included in index.html) converts the HTML element to a canvas. */
   const canvas = await html2canvas(pageEl, options);
 
-  /** Send image data for modification if effect is scanner */
+  // Apply scanner effect if selected
   if (document.querySelector('#page-effects').value === 'scanner') {
     const context = canvas.getContext('2d');
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     contrastImage(imageData, 0.55);
-    canvas.getContext('2d').putImageData(imageData, 0, 0);
+    context.putImageData(imageData, 0, 0);
   }
 
   outputImages.push(canvas);
-  // Displaying no. of images on addition
-  if (outputImages.length >= 1) {
-    document.querySelector('#output-header').textContent =
-      'Output ' + '( ' + outputImages.length + ' )';
-  }
+  // Update header with the number of generated images
+  document.querySelector('#output-header').textContent =
+    'Output ( ' + outputImages.length + ' )';
 }
 
 /**
- * This is the function that gets called on clicking "Generate Image" button.
+ * Greedy Algorithm for Pagination:
+ *
+ * This helper function implements a greedy strategy to paginate text content.
+ * It splits the original content into tokens (words and whitespace) and
+ * iteratively builds up a page by appending tokens until the container's
+ * height exceeds the designated clientHeight. Once the height is exceeded,
+ * it finalizes the current page (by removing the last token that caused the overflow)
+ * and starts a new page. This approach is simple, efficient, and adheres to the
+ * Single Responsibility Principle by isolating pagination from image generation.
+ *
+ * @param {string} content - The full text content to be paginated.
+ * @param {HTMLElement} container - The DOM element used to measure text height.
+ * @param {number} clientHeight - The maximum allowed height for each page.
+ * @returns {string[]} An array of strings, each representing the content for one page.
+ */
+function paginateContent(content, container, clientHeight) {
+  const tokens = content.split(/(\s+)/); // split content while keeping spaces
+  const pages = [];
+  let currentPageTokens = [];
+  let index = 0;
+
+  while (index < tokens.length) {
+    // Try adding the next token and check if it fits
+    currentPageTokens.push(tokens[index]);
+    container.innerHTML = currentPageTokens.join('');
+    if (container.scrollHeight > clientHeight) {
+      // The last token caused overflow. Remove it and finalize the current page.
+      currentPageTokens.pop();
+      pages.push(currentPageTokens.join(''));
+      // Reset the current page tokens; note: do not lose the token that caused overflow
+      currentPageTokens = [];
+      // Do not increment index so that the token is retried for the next page.
+    } else {
+      index++;
+    }
+  }
+  // Add any remaining tokens as the final page.
+  if (currentPageTokens.length > 0) {
+    pages.push(currentPageTokens.join(''));
+  }
+  return pages;
+}
+
+/**
+ * This function is called when the "Generate Image" button is clicked.
  */
 export async function generateImages() {
   applyPaperStyles();
@@ -48,44 +89,29 @@ export async function generateImages() {
 
   const paperContentEl = document.querySelector('.page-a .paper-content');
   const scrollHeight = paperContentEl.scrollHeight;
-  const clientHeight = 514; // height of .paper-content when there is no content
+  const clientHeight = 514; // fixed height for .paper-content when empty
 
-  const totalPages = Math.ceil(scrollHeight / clientHeight);
-
-  if (totalPages > 1) {
-    // For multiple pages
+  // If content requires multiple pages, use the greedy pagination algorithm.
+  if (scrollHeight > clientHeight) {
+    // Warning if images are already present
     if (paperContentEl.innerHTML.includes('<img')) {
       alert(
-        "You're trying to generate more than one page, Images and some formatting may not work correctly with multiple images" // eslint-disable-line max-len
+        "You're trying to generate more than one page, Images and some formatting may not work correctly with multiple images"
       );
     }
     const initialPaperContent = paperContentEl.innerHTML;
-    const splitContent = initialPaperContent.split(/(\s+)/);
+    // Use the helper function to split content into pages.
+    const pages = paginateContent(initialPaperContent, paperContentEl, clientHeight);
 
-    // multiple images
-    let wordCount = 0;
-    for (let i = 0; i < totalPages; i++) {
-      paperContentEl.innerHTML = '';
-      const wordArray = [];
-      let wordString = '';
-
-      while (
-        paperContentEl.scrollHeight <= clientHeight &&
-        wordCount <= splitContent.length
-      ) {
-        wordString = wordArray.join(' ');
-        wordArray.push(splitContent[wordCount]);
-        paperContentEl.innerHTML = wordArray.join(' ');
-        wordCount++;
-      }
-      paperContentEl.innerHTML = wordString;
-      wordCount--;
+    // Iterate through each page, generate an image, and then restore the full content.
+    for (const pageText of pages) {
+      paperContentEl.innerHTML = pageText;
       pageEl.scrollTo(0, 0);
       await convertDIVToImage();
       paperContentEl.innerHTML = initialPaperContent;
     }
   } else {
-    // single image
+    // Single page scenario
     await convertDIVToImage();
   }
 
@@ -95,9 +121,8 @@ export async function generateImages() {
 }
 
 /**
- * Delete all generated images
+ * Deletes all generated images.
  */
-
 export const deleteAll = () => {
   outputImages.splice(0, outputImages.length);
   renderOutput(outputImages);
@@ -105,6 +130,10 @@ export const deleteAll = () => {
     'Output' + (outputImages.length ? ' ( ' + outputImages.length + ' )' : '');
 };
 
+/**
+ * Moves an element within an array from oldIndex to newIndex.
+ * Time Complexity: O(n) in the worst-case due to the use of splice.
+ */
 const arrayMove = (arr, oldIndex, newIndex) => {
   if (newIndex >= arr.length) {
     let k = newIndex - arr.length + 1;
@@ -113,7 +142,7 @@ const arrayMove = (arr, oldIndex, newIndex) => {
     }
   }
   arr.splice(newIndex, 0, arr.splice(oldIndex, 1)[0]);
-  return arr; // for testing
+  return arr; // returns the modified array
 };
 
 export const moveLeft = (index) => {
@@ -129,12 +158,12 @@ export const moveRight = (index) => {
 };
 
 /**
- * Downloads generated images as PDF
+ * Downloads generated images as a PDF.
  */
 export const downloadAsPDF = () => createPDF(outputImages);
 
 /**
- * Sets event listeners for close button on output images.
+ * Sets event listeners for close and move buttons on output images.
  */
 function setRemoveImageListeners() {
   document
@@ -142,14 +171,10 @@ function setRemoveImageListeners() {
     .forEach((closeButton) => {
       closeButton.addEventListener('click', (e) => {
         outputImages.splice(Number(e.target.dataset.index), 1);
-        // Displaying no. of images on deletion
-        if (outputImages.length >= 0) {
-          document.querySelector('#output-header').textContent =
-            'Output' +
-            (outputImages.length ? ' ( ' + outputImages.length + ' )' : '');
-        }
+        document.querySelector('#output-header').textContent =
+          'Output' + (outputImages.length ? ' ( ' + outputImages.length + ' )' : '');
         renderOutput(outputImages);
-        // When output changes, we have to set remove listeners again
+        // Re-attach listeners after output changes.
         setRemoveImageListeners();
       });
     });
@@ -157,9 +182,7 @@ function setRemoveImageListeners() {
   document.querySelectorAll('.move-left').forEach((leftButton) => {
     leftButton.addEventListener('click', (e) => {
       moveLeft(Number(e.target.dataset.index));
-      // Displaying no. of images on deletion
       renderOutput(outputImages);
-      // When output changes, we have to set remove listeners again
       setRemoveImageListeners();
     });
   });
@@ -167,16 +190,15 @@ function setRemoveImageListeners() {
   document.querySelectorAll('.move-right').forEach((rightButton) => {
     rightButton.addEventListener('click', (e) => {
       moveRight(Number(e.target.dataset.index));
-      // Displaying no. of images on deletion
       renderOutput(outputImages);
-      // When output changes, we have to set remove listeners again
       setRemoveImageListeners();
     });
   });
 }
 
-/** Modifies image data to add contrast */
-
+/**
+ * Modifies image data to add contrast.
+ */
 function contrastImage(imageData, contrast) {
   const data = imageData.data;
   contrast *= 255;
